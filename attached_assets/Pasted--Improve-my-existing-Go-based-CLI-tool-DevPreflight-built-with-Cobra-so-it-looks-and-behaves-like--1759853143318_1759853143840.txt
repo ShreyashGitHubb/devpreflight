@@ -1,0 +1,54 @@
+“Improve my existing Go-based CLI tool (DevPreflight) built with Cobra so it looks and behaves like professional Linux tools (e.g. git, kubectl).
+
+Specifically, do the following upgrades step-by-step:
+
+Add detailed built-in documentation and --help output for every command (check, fix, ci-report).
+
+Use Cobra’s Long: and Example: fields to include formatted examples and explanations.
+
+Show clear descriptions, command usage, and flags in terminal like a real CLI (devpreflight check --help).
+
+Implement a root-level devpreflight help [command] command that dynamically lists subcommands and their short summaries (Cobra supports this).
+
+Add version and completion commands:
+
+Add devpreflight version to show version, build date, and commit hash.
+
+Add devpreflight completion [bash|zsh|fish|powershell] to generate shell completion scripts.
+
+Add colorful output with human-friendly formatting using a small library like github.com/fatih/color or github.com/charmbracelet/lipgloss.
+
+Example: green checkmarks (✔), yellow warnings (⚠️), red crosses (✖).
+
+Add built-in self-documentation command:
+
+Add devpreflight docs that generates Markdown documentation for all commands and writes it into a /docs folder automatically (use Cobra’s built-in doc generator doc.GenMarkdownTree).
+
+So users can open docs/devpreflight_check.md, docs/devpreflight_fix.md, etc.
+
+Ensure consistent CLI UX:
+
+Add a header banner (“DevPreflight v0.1.0 – Developer Deployment Preflight Checks”).
+
+Add unified flag handling (--format, --output, --yes, --config).
+
+Add a --verbose flag for all commands.
+
+Polish the command structure and help text:
+
+Root help should show: usage, examples, list of commands, config file path.
+
+Each subcommand help should show: what it checks, when to use it, example invocation.
+
+Generate usage examples in help automatically (e.g., from annotated code or a static string map).
+
+Add man page generation via Cobra’s GenManTree so Linux users can do man devpreflight.
+
+Add a changelog and command to display it:
+
+Create CHANGELOG.md and expose via devpreflight changelog.
+
+Make sure the final code keeps all current working features and checks intact (env parity, Dockerfile lint, Kubernetes validation, observability, flaky tests), and simply enhances the UX and documentation layer.
+
+Return the updated Go code structure (main.go + commands/*.go), showing where help text and docs generation logic are added.
+Don’t remove my existing business logic — just wrap it with better CLI documentation and usability improvements.”

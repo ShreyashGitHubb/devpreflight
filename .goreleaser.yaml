@@ -1,0 +1,63 @@
+before:
+  hooks:
+    - go mod tidy
+    - go generate ./...
+
+builds:
+  - env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X github.com/devpreflight/devpreflight/cmd.Version={{.Version}}
+    
+archives:
+  - format: tar.gz
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+    format_overrides:
+      - goos: windows
+        format: zip
+
+checksum:
+  name_template: 'checksums.txt'
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^ci:'
+      - Merge pull request
+      - Merge branch
+
+brews:
+  - name: devpreflight
+    homepage: "https://github.com/devpreflight/devpreflight"
+    description: "A CLI tool for validating development configurations and best practices"
+    tap:
+      owner: devpreflight
+      name: homebrew-devpreflight
+    folder: Formula
+    test: |
+      system "#{bin}/devpreflight version"
+    install: |
+      bin.install "devpreflight"
+      
+      # Generate completion scripts
+      output = Utils.safe_popen_read("#{bin}/devpreflight", "completion", "bash")
+      (bash_completion/"devpreflight").write output
+      output = Utils.safe_popen_read("#{bin}/devpreflight", "completion", "zsh")
+      (zsh_completion/"_devpreflight").write output
+      output = Utils.safe_popen_read("#{bin}/devpreflight", "completion", "fish")
+      (fish_completion/"devpreflight.fish").write output

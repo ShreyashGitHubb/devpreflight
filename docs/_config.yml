@@ -1,0 +1,9 @@
+remote_theme: pages-themes/cayman@v0.2.0
+plugins:
+  - jekyll-remote-theme
+  
+title: DevPreflight
+description: A CLI tool for validating development configurations and best practices
+show_downloads: true
+google_analytics:
+baseurl: /devpreflight

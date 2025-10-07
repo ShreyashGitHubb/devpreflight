@@ -1,0 +1,24 @@
+version: 1
+
+checks:
+  env_parity: true
+  dockerfile_lint: true
+  k8s_validate: true
+  observability: true
+  flaky_tests: false
+
+env:
+  required_keys: []
+
+docker:
+  forbid_latest: true
+
+k8s:
+  schema_validate: true
+
+ci:
+  timeout_seconds: 300
+
+report:
+  format: console
+  output: ""

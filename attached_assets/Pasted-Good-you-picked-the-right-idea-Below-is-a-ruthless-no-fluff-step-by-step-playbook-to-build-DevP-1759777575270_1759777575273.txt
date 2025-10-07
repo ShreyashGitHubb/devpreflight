@@ -1,0 +1,527 @@
+Good — you picked the right idea. Below is a ruthless, no-fluff, step-by-step playbook to build DevPreflight (the preflight CLI). Do the steps in order, don’t paste unicorn features into week 1, and ship something that actually saves time. I’ll give commands, file layouts, code snippets for the fastest path to a working MVP, testing, CI integration, release, and the non-negotiable guardrails.
+
+TL;DR — what you’ll build
+
+A single static binary (devpreflight) that runs a curated set of preflight checks (env parity, Dockerfile quick-lints, k8s manifest validation, observability hooks, flaky-test detector), produces a human + machine report, and can be used locally, in pre-commit, and in CI.
+
+Overall timeline (recommended)
+
+Follow a 6-week sprint plan. Each week ends with a working demo you can run on a sample repo.
+
+
+---
+
+Step-by-step plan (concrete)
+
+0) Before you start — decisions (5–60 minutes)
+
+Decide now (don’t waffle):
+
+Language: Go (static binary, ecosystem, easy distribution).
+
+CLI framework: cobra.
+
+Config: .devpreflightrc.yml using Viper for overrides.
+
+Start by wrapping existing linters/scanners (hadolint, kubeval/kubeconform, trivy) instead of rewriting them. Shelling out is OK for MVP.
+
+
+If you can’t live with Go, Node is acceptable but expect worse UX on CI installs.
+
+
+---
+
+1) Create repo & basic CLI skeleton (day 1)
+
+Deliverable: devpreflight binary with check, fix, ci-report subcommands.
+
+Terminal commands:
+
+mkdir devpreflight && cd devpreflight
+git init
+go mod init github.com/yourorg/devpreflight
+# add cobra
+go get github.com/spf13/cobra@latest
+go get github.com/spf13/viper@latest
+
+Create main.go (minimal Cobra scaffold). Example:
+
+package main
+
+import (
+  "fmt"
+  "os"
+  "github.com/spf13/cobra"
+)
+
+var rootCmd = &cobra.Command{
+  Use: "devpreflight",
+  Short: "Run dev -> deploy preflight checks",
+}
+
+func main() {
+  rootCmd.AddCommand(checkCmd)
+  rootCmd.AddCommand(fixCmd)
+  rootCmd.AddCommand(ciReportCmd)
+  if err := rootCmd.Execute(); err != nil {
+    fmt.Println(err)
+    os.Exit(1)
+  }
+}
+
+// stub commands
+var checkCmd = &cobra.Command{
+  Use: "check",
+  Run: func(cmd *cobra.Command, args []string) {
+    fmt.Println("TODO: run checks")
+  },
+}
+var fixCmd = &cobra.Command{ Use: "fix", Run: func(*cobra.Command, []string){ fmt.Println("TODO: fix") } }
+var ciReportCmd = &cobra.Command{ Use: "ci-report", Run: func(*cobra.Command, []string){ fmt.Println("TODO: ci-report") } }
+
+Commit, push, create GitHub repo.
+
+
+---
+
+2) Implement config + logging + exit codes (days 1–2)
+
+Deliverable: .devpreflightrc.yml support and structured logging.
+
+Use Viper to load .devpreflightrc.yml, allow environment overrides.
+
+Define exit codes:
+
+0 = ok, 1 = warnings only, 2 = critical failures.
+
+
+Minimal config example:
+
+
+checks:
+  env_parity: true
+  dockerfile_lint: true
+  k8s_validate: true
+  observability: true
+  flaky_tests: true
+
+env:
+  required_keys: []
+docker:
+  forbid_latest: true
+k8s:
+  schema_validate: true
+ci:
+  timeout_seconds: 300
+
+
+---
+
+3) Build first real check: env parity (days 2–4)
+
+Deliverable: devpreflight check can detect missing env keys and run devpreflight fix --env.
+
+Why start here: easy to implement, immediate value, low false-positives.
+
+Implementation notes:
+
+Use github.com/joho/godotenv to parse .env and .env.example.
+
+Algorithm:
+
+Parse .env.example keys (required list).
+
+Parse .env keys.
+
+Report missing keys, extra keys, and value patterns that look like secrets (long base64/hex).
+
+
+fix --env behavior:
+
+Add missing keys to .env with placeholder __REPLACE_ME__ and print exact next steps.
+
+Never populate values from environment or other sources automatically.
+
+
+
+Go snippet (core logic):
+
+// pseudocode: load both files and diff keys. Use godotenv library.
+
+Test with a sample repo.
+
+
+---
+
+4) Dockerfile quick checks (days 4–7)
+
+Deliverable: Dockerfile analyzer that flags FROM ...:latest, missing multi-stage builds, suspicious RUN patterns.
+
+Implementation (MVP):
+
+Parse Dockerfile with moby/buildkit/frontend/dockerfile/parser OR do a simple regex parse if you want faster MVP.
+
+Rules to flag:
+
+latest tag used.
+
+No multi-stage build for compiled languages.
+
+Large RUN layers combining apt-get without --no-install-recommends (recommendation only).
+
+
+Optionally shell out to hadolint if installed: hadolint Dockerfile -f json and parse its output.
+
+
+fix behavior:
+
+Suggest Dockerfile snippets; do not auto-edit Dockerfile unless user passes --yes.
+
+
+
+---
+
+5) Kubernetes manifest validation (days 7–12)
+
+Deliverable: K8s manifest validator that fails CI for deprecated apiVersions and schema issues.
+
+Implementation options (pick one for MVP):
+
+Shell out to kubeconform or kubeval (fast to get real schema checks).
+
+Or use Go libs, but heavy. For MVP, call kubeconform -q -schema-location default manifest/*.yaml if binary present; otherwise warn with suggestion.
+
+
+Checks:
+
+Deprecated API versions.
+
+Missing required fields (metadata.name, spec.selector in Deployment).
+
+Large antipatterns (hostPath where not expected) — keep these as warnings.
+
+
+Output JSON summary for CI usage.
+
+
+---
+
+6) Observability heuristics (days 12–15)
+
+Deliverable: heuristics that assert minimal instrumentation.
+
+Heuristics to implement:
+
+Check for common environment variables: OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_TRACES_SAMPLER, SENTRY_DSN, PROMETHEUS_MULTIPROC_DIR.
+
+Attempt to curl --fail common endpoints if service runs locally in dev: /metrics, /health, /healthz — only if user passes --probe.
+
+If no instrumentation found, warn and include code snippet for adding OTEL SDK env vars or instrumenting a simple /metrics with Prometheus client.
+
+
+Make these checks configurable and opt-in probe (so CI doesn't try to hit non-running services by default).
+
+
+---
+
+7) Flaky-test detector (days 15–21)
+
+Deliverable: a lightweight tool that detects flaky tests by running a smoke set multiple times.
+
+Approach:
+
+Detect test runner by scanning repo:
+
+go test ./..., pytest -q, npm test --silent etc.
+
+
+Run the selected tests N times (configurable, default N=2).
+
+If any test passes one run and fails another => flag as flaky and print the exact command to reproduce.
+
+
+For large suites, run only smoke tests or tests marked with @smoke tag (configurable).
+
+Option: allow running with --concurrency and a timeout.
+
+
+Be explicit: flaky detection can slow CI — keep default N small.
+
+
+---
+
+8) Output formats & CI integration (days 21–25)
+
+Deliverable: devpreflight ci-report --format markdown|json --output pr-comment.md and a sample GitHub Action.
+
+JSON schema for CI:
+
+
+{
+  "summary": "3 warnings, 1 failure",
+  "checks": [
+    {"name":"env_parity","status":"ok","details":""},
+    {"name":"dockerfile_lint","status":"warn","details":"uses latest tag"}
+  ],
+  "exit_code": 2
+}
+
+Markdown PR comment sample generator:
+
+Provide a small table, concise remediation steps, and one-line command the PR author can run locally.
+
+
+
+Sample GitHub Action (add .github/workflows/devpreflight.yml):
+
+name: DevPreflight Check
+on: [pull_request]
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install devpreflight
+        run: |
+          curl -sSL https://github.com/yourorg/devpreflight/releases/download/v0.1.0/devpreflight_linux_amd64.tar.gz | tar -xz -C /usr/local/bin
+      - name: Run devpreflight
+        run: devpreflight check --format json --output preflight.json || true
+      - name: Post PR comment
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          path: preflight.md
+
+(Use a benign action to post comments. For MVP, instruct users to add this workflow manually in docs.)
+
+
+---
+
+9) Testing: unit + integration + e2e (days 25–30)
+
+Deliverable: test suite and sample repos.
+
+Unit tests for each check using Go testing.
+
+Integration tests: use small sample repos in ./tests/fixtures/* with intentionally broken Dockerfile/.env/k8s manifests; run devpreflight check against them in CI.
+
+E2E: run the full GH Action on a test PR repo (you can create a private test repo).
+
+
+Automate tests in GitHub Actions. Fail CI if unit tests fail.
+
+
+---
+
+10) Packaging & distribution (days 30–36)
+
+Deliverable: releases via goreleaser, Homebrew formula, Docker image for CI.
+
+Add goreleaser config to produce Linux/ARM/Mac binaries and a Homebrew tap.
+
+Provide a Docker image (yourorg/devpreflight:latest) so CI can docker run -v $PWD:/workdir yourorg/devpreflight check.
+
+Release v0.1.0 with a clear changelog: “Alpha: env parity, Dockerfile lint, k8s validate, observability heuristics, flaky-test detector.”
+
+
+Commands to add:
+
+go install github.com/goreleaser/goreleaser@latest
+# run goreleaser --snapshot --rm-dist locally while iterating
+
+
+---
+
+11) Docs, examples, config presets (days 36–40)
+
+Deliverable: README, docs folder, 3 example integrations (Node, Python, Go) in /examples.
+
+Your README must include:
+
+One-liner, TL;DR install, example usage, and how to add to PRs.
+
+Example .devpreflightrc.yml
+
+Example GitHub Action
+
+Troubleshooting and FAQ
+
+
+
+---
+
+12) Telemetry & metrics (optional, week 6)
+
+Only after you have people using it:
+
+Implement opt-in anonymous telemetry (count of checks run, optional team_id, version) — prefer a beacon that can be disabled via env var. Make telemetry OFF by default.
+
+Track installs (via GitHub Releases download data), PR action usage, and issues filed.
+
+
+Privacy rule: never upload repo content or secrets. Telemetry must be counts only.
+
+
+---
+
+13) Post-MVP roadmap (weeks 7–12)
+
+Pick 1–2 of:
+
+Auto-fix improvements (safe edits only).
+
+Plugin system (allow teams to add custom checks).
+
+Rules UI (web dashboard) — avoid until you have stable users.
+
+Enterprise features: private rule bundles, central config.
+
+
+
+---
+
+Config file example (.devpreflightrc.yml)
+
+version: 1
+checks:
+  env_parity:
+    enabled: true
+  dockerfile_lint:
+    enabled: true
+    forbid_latest: true
+  k8s_validate:
+    enabled: true
+  flaky_tests:
+    enabled: true
+    runs: 2
+  observability:
+    enabled: true
+    probes: false
+report:
+  format: markdown
+  output: preflight.md
+
+
+---
+
+Example CLI UX (as you ship it)
+
+$ devpreflight check
+✔ env: .env matches .env.example
+! dockerfile: image uses "latest" tag -> warn
+! k8s: deployment.yaml uses deprecated apiVersion apps/v1beta1 -> warn
+✖ tests: flaky-test detected: tests/test_auth.py (pass|fail)
+Summary: 1 failure, 2 warnings
+Run `devpreflight fix --env` or `devpreflight ci-report --output pr_comment.md`
+Exit code: 2
+
+
+---
+
+Tests you must write (don’t skip)
+
+Unit tests: parse .env, diff keys, parse Dockerfile tokens (basic).
+
+Integration tests: run devpreflight on fixture repos — assert exit codes and report content.
+
+CI smoke test: run the GitHub Action in the repo and verify a synthetic PR triggers expected comment.
+
+
+
+---
+
+Non-negotiable guardrails (do not violate)
+
+No automatic fixes that touch secrets or credentials. Always require --yes.
+
+Respect offline mode: checks that require network must be optional and cached.
+
+No repo data exfiltration. Telemetry must be opt-in and anonymized.
+
+
+
+---
+
+OSS and community playbook (day 1 and ongoing)
+
+Open-source MIT.
+
+Add a CONTRIBUTING.md and CODE_OF_CONDUCT.
+
+Create issue templates: bug, feature, docs.
+
+Add a “How to add a check” guide for contributors.
+
+Seed 3 example repos showing config + GitHub Action; advertise these in README.
+
+
+
+---
+
+Success metrics (first 90 days)
+
+100 installs / downloads (conservative).
+
+10 active repos using GitHub Action.
+
+Reduction in deploy-failing PRs in pilot repos by 15–25% (requires measuring).
+
+< 15% false positives flagged in alpha (iterate fast).
+
+
+
+---
+
+Common pitfalls & how to avoid them (ruthless)
+
+Pitfall: Scope creep — if you try to replace Snyk/Hadolint/Trivy with perfect native implementations, you will never ship. Fix: shell out to battle-tested tools first.
+
+Pitfall: Too noisy checks — developers will disable the tool. Fix: conservative defaults, mute rules via config, allow per-repo suppression.
+
+Pitfall: Performance — scans slow CI. Fix: allow caching, enable/disable heavy checks, run heavy scans in a separate job.
+
+Pitfall: Security scare — scanning images without permissions will be rejected. Fix: clearly document what the tool does and that it never uploads secrets.
+
+
+Be ruthless: if a check produces >10% false positives in alpha, remove or change it immediately.
+
+
+---
+
+First 24 hours — exact commands to get moving (do this now)
+
+1. Create repo and scaffold CLI:
+
+
+
+mkdir devpreflight && cd devpreflight
+git init
+go mod init github.com/yourorg/devpreflight
+cat > main.go <<'EOF'
+<paste the main.go scaffold from above>
+EOF
+go fmt
+git add .
+git commit -m "chore: scaffold CLI"
+
+2. Create .devpreflightrc.yml and a sample fixture repo tests/fixtures/simple-repo with .env.example and .env and a bad Dockerfile.
+
+
+3. Implement the env parity check using github.com/joho/godotenv. Get it passing against the fixture.
+
+
+
+If you stall at any step, tell me exactly which file or error — I’ll rip it apart and give direct, uncompromising fixes.
+
+
+---
+
+Final call — what I’ll do next for you (pick one)
+
+I won’t do your homework silently. Choose one and I’ll produce it immediately in this chat (ready to paste into your repo):
+
+A) Full Go scaffold: working main.go, env parity check implemented, basic tests, and a GitHub Action file.
+B) Detailed design doc + file layout: full file-by-file plan, exact interfaces for check plugins, JSON report schema, and goreleaser config.
+C) Write the env_parity Go implementation now with tests and a sample fixture.
+
+Pick A, B, or C. Don’t overthink — pick.
+

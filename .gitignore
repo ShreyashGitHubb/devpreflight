@@ -1,0 +1,36 @@
+# Binaries
+devpreflight
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binaries
+*.test
+
+# Output coverage
+*.out
+
+# Go workspace files
+go.work
+go.work.sum
+
+# Build artifacts
+dist/
+build/
+
+# Environment files
+.env
+.env.local
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Replit
+.replit
+replit.nix

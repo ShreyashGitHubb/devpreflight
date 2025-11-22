@@ -43,9 +43,10 @@ func determineExitCode(results []checks.CheckResult) int {
 	hasWarnings := false
 	
 	for _, result := range results {
-		if result.Status == checks.StatusFail {
+		switch result.Status {
+		case checks.StatusFail:
 			hasFailures = true
-		} else if result.Status == checks.StatusWarn {
+		case checks.StatusWarn:
 			hasWarnings = true
 		}
 	}

@@ -11,6 +11,11 @@ import (
 
 type EnvParityChecker struct{}
 
+// NewEnvParityChecker creates a new EnvParityChecker instance
+func NewEnvParityChecker() *EnvParityChecker {
+	return &EnvParityChecker{}
+}
+
 func (c *EnvParityChecker) Name() string {
 	return "env_parity"
 }

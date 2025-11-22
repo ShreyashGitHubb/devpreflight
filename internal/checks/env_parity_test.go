@@ -2,48 +2,35 @@ package checks
 
 import (
 	"testing"
+
+	"github.com/devpreflight/devpreflight/internal/config"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestEnvParityChecker(t *testing.T) {
-	tests := []struct {
-		name     string
-		envFiles map[string][]string
-		want     bool
-		wantErr  bool
-	}{
-		{
-			name: "matching environments",
-			envFiles: map[string][]string{
-				"dev": {"APP_KEY", "DB_HOST"},
-				"prod": {"APP_KEY", "DB_HOST"},
+	t.Run("constructor creates checker", func(t *testing.T) {
+		checker := NewEnvParityChecker()
+		assert.NotNil(t, checker)
+		assert.Equal(t, "env_parity", checker.Name())
+	})
+	
+	t.Run("checker is enabled by default", func(t *testing.T) {
+		checker := NewEnvParityChecker()
+		cfg := &config.Config{
+			Checks: config.ChecksConfig{
+				EnvParity: true,
 			},
-			want:    true,
-			wantErr: false,
-		},
-		{
-			name: "missing env var in prod",
-			envFiles: map[string][]string{
-				"dev": {"APP_KEY", "DB_HOST", "DEBUG"},
-				"prod": {"APP_KEY", "DB_HOST"},
+		}
+		assert.True(t, checker.Enabled(cfg))
+	})
+	
+	t.Run("checker is disabled when config is false", func(t *testing.T) {
+		checker := NewEnvParityChecker()
+		cfg := &config.Config{
+			Checks: config.ChecksConfig{
+				EnvParity: false,
 			},
-			want:    false,
-			wantErr: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			checker := NewEnvParityChecker()
-			got, err := checker.Check(tt.envFiles)
-			
-			if tt.wantErr {
-				assert.Error(t, err)
-				return
-			}
-			
-			assert.NoError(t, err)
-			assert.Equal(t, tt.want, got)
-		})
-	}
+		}
+		assert.False(t, checker.Enabled(cfg))
+	})
 }

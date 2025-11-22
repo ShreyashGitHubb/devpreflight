@@ -11,6 +11,11 @@ import (
 
 type DockerfileChecker struct{}
 
+// NewDockerfileChecker creates a new DockerfileChecker instance
+func NewDockerfileChecker() *DockerfileChecker {
+	return &DockerfileChecker{}
+}
+
 func (c *DockerfileChecker) Name() string {
 	return "dockerfile_lint"
 }

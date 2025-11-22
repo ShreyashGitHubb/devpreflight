@@ -50,28 +50,6 @@ This makes it perfect for CI/CD pipelines that need to fail on critical issues.`
                         output = cfg.Report.Output
                 }
 
-                results := runChecks(cfg)
-                
-                // Determine exit code based on results
-                hasFailures := false
-                hasWarnings := false
-                for _, result := range results {
-                        switch result.Status {
-                        case "fail":
-                                hasFailures = true
-                        case "warn":
-                                hasWarnings = true
-                        }
-                }
-
-                if hasFailures {
-                        os.Exit(ExitError)
-                } else if hasWarnings {
-                        os.Exit(ExitWarning)
-                }
-                os.Exit(ExitSuccess)
-                }
-                
                 exitCode := runChecksAndReport(cfg, format, output)
                 os.Exit(exitCode)
                 return nil

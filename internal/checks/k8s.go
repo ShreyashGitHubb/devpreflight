@@ -12,6 +12,11 @@ import (
 
 type K8sChecker struct{}
 
+// NewK8sChecker creates a new K8sChecker instance
+func NewK8sChecker() *K8sChecker {
+	return &K8sChecker{}
+}
+
 func (c *K8sChecker) Name() string {
 	return "k8s_validate"
 }
